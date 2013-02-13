@@ -27,6 +27,7 @@ package gozmq
 */
 import "C"
 import "unsafe"
+import "reflect"
 
 var (
 	RECOVERY_IVL_MSEC = Int64SocketOption(C.ZMQ_RECOVERY_IVL_MSEC)
@@ -40,16 +41,9 @@ var (
 // int zmq_send (void *s, zmq_msg_t *msg, int flags);
 func (s *zmqSocket) Send(data []byte, flags SendRecvOption) error {
 	var m C.zmq_msg_t
-	// Copy data array into C-allocated buffer.
-	size := C.size_t(len(data))
 
-	if C.zmq_msg_init_size(&m, size) != 0 {
-		return errno()
-	}
-
-	if size > 0 {
-		// FIXME Ideally this wouldn't require a copy.
-		C.memcpy(unsafe.Pointer(C.zmq_msg_data(&m)), unsafe.Pointer(&data[0]), size) // XXX I hope this works...(seems to)
+	if err := slice2msg(data, &m); err != nil {
+		return err
 	}
 
 	if C.zmq_send(s.s, &m, C.int(flags)) != 0 {
@@ -80,7 +74,8 @@ func (s *zmqSocket) Recv(flags SendRecvOption) (data []byte, err error) {
 	size := C.zmq_msg_size(&m)
 	if size > 0 {
 		data = make([]byte, int(size))
-		C.memcpy(unsafe.Pointer(&data[0]), C.zmq_msg_data(&m), size)
+		header := (*reflect.SliceHeader)((unsafe.Pointer(&data)))
+		C.memcpy(unsafe.Pointer(header.Data), C.zmq_msg_data(&m), size)
 	} else {
 		data = nil
 	}

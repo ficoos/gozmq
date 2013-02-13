@@ -28,6 +28,7 @@ import "C"
 
 import (
 	"errors"
+	"reflect"
 	"syscall"
 	"unsafe"
 )
@@ -418,6 +419,22 @@ func Device(t DeviceType, in, out Socket) error {
 		return errno()
 	}
 	return errors.New("zmq_device() returned unexpectedly.")
+}
+
+func slice2msg(data []byte, m *C.zmq_msg_t) error {
+	// Copy data array into C-allocated buffer.
+	size := C.size_t(len(data))
+
+	if C.zmq_msg_init_size(m, size) != 0 {
+		return errno()
+	}
+
+	if size > 0 {
+		header := (*reflect.SliceHeader)((unsafe.Pointer(&data)))
+		// FIXME Ideally this wouldn't require a copy.
+		C.memcpy(unsafe.Pointer(C.zmq_msg_data(m)), unsafe.Pointer(header.Data), size)
+	}
+	return nil
 }
 
 // XXX For now, this library abstracts zmq_msg_t out of the API.
